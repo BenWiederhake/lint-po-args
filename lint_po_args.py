@@ -19,8 +19,8 @@ import re
 RE_PRINTFISH = re.compile(r"%[0-9a-zA-Z+-]+", re.M)
 RE_CMDLINE_OPTION = re.compile(r"(?<![0-9a-zA-Z_-])-[0-9a-zA-Z_-]+", re.M)
 # In-line unit test:
-assert RE_PRINTFISH.findall("-foo bar --baz and %quux the -4") == ['%quux']
-assert RE_CMDLINE_OPTION.findall("-foo bar --baz and %quux the -4") == ['-foo', '--baz', '-4']
+assert RE_PRINTFISH.findall("-foo bar --baz and %quux the -4") == ["%quux"]
+assert RE_CMDLINE_OPTION.findall("-foo bar --baz and %quux the -4") == ["-foo", "--baz", "-4"]
 
 ESCAPE_DICT = {
     "t": "\t",
@@ -64,13 +64,13 @@ assert unescape('"asdf"') == "asdf"
 assert unescape('"foo""bar"') == "foobar"
 assert unescape('"Hello\\nWorld"') == "Hello\nWorld"
 assert unescape('"Hello\\"World"') == 'Hello"World'
-assert unescape('"fan\\\\cy"') == 'fan\\cy'
+assert unescape('"fan\\\\cy"') == "fan\\cy"
 
 
 def parse_po_data(raw_data: str) -> List[Translation]:
     # None-ness indicates whether the start-tag has been seen already
     line_first: Optional[int] = None
-    msgid_parts: Optional[List[str]] = None 
+    msgid_parts: Optional[List[str]] = None
     msgstr_parts: Optional[List[str]] = None
     translations: List[Translation] = []
     i = -1
@@ -93,13 +93,13 @@ def parse_po_data(raw_data: str) -> List[Translation]:
             line_first = i + 1
             msgid_parts = []
             msgstr_parts = None
-            line = line[len("msgid "):]
+            line = line[len("msgid "): ]
             assert line.startswith('"'), "line %d: msgid does not directly continue with string?!" % (i + 1)
         if line.startswith("msgstr "):
             assert line_first is not None
             assert (msgid_parts is not None) and (msgstr_parts is None), "line %d: start of msgstr, but inconsistent state with line %d?!" % (i + 1, line_first)
             msgstr_parts = []
-            line = line[len("msgstr "):]
+            line = line[len("msgstr "): ]
         unescaped_line = unescape(line)
         if msgstr_parts is None:
             assert msgid_parts is not None
