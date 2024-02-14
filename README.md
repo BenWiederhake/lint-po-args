@@ -23,6 +23,7 @@ My goal is to make this some kind of successor in spirit to `POFileChecker`, whi
 
 - [Background](#background)
 - [Usage](#usage)
+- [Development](#development)
 - [TODOs](#todos)
 - [TODONT](#todont)
 - [Contribute](#contribute)
@@ -64,12 +65,22 @@ options:
 
 Note that plural support and any other "high-level" features are broken/missing, simply because I had to write my own PO-parser.
 
+## Development
+
+* I'm somewhat new to mypy, so the "typing" stuff might not be perfect. Improvements welcome! For new code, please try to include something more reasonable than `Any`.
+* `mypy` finds no issues.
+* No errors/warnings in `pyflakes3`.
+* `pylint` only generates nuisance warnings (documentation, "long lines", etc.)
+* `black` only suggests changes that make the code harder to read, like inserting linebreaks in weird places
+
 ## TODOs
 
 * Extend/replace the parser
+    * Most importantly, plural support
 * Does the regex need to be made more robust?
 * Slightly more targeted hints would be nice, like a better diff on the list of detections (cmdlineargs/printf).
 * Should the order matter? printf yes, cmdline maybe, interleaved … hard to say. Think more about that.
+* Nicer support for running this on "all" `.po` files of a project?
 * Fix all the problems with translations everywhere. ;-)
 
 ## TODONT
