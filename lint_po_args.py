@@ -17,8 +17,17 @@ import re
 
 FILENAME = "/scratch/findutils-deb/findutils-4.9.0/po/de_simplified.po"
 SHOW_PARSED_TRANSLATIONS = False
+ALSO_CHECK_PRINTF = False
 
-RE_SPECIAL_OPTION = re.compile(r"(?<![0-9a-zA-Z_-])-[0-9a-zA-Z_-]+|%[0-9a-zA-Z+-]+", re.M)
+if ALSO_CHECK_PRINTF:
+    RE_SPECIAL_OPTION = re.compile(r"(?<![0-9a-zA-Z_-])-[0-9a-zA-Z_-]+|%[0-9a-zA-Z+-]+", re.M)
+    # In-line unit test:
+    assert RE_SPECIAL_OPTION.findall("-foo bar --baz and %quux the -4") == ['-foo', '--baz', '%quux', '-4']
+else:
+    RE_SPECIAL_OPTION = re.compile(r"(?<![0-9a-zA-Z_-])-[0-9a-zA-Z_-]+", re.M)
+    # In-line unit test:
+    assert RE_SPECIAL_OPTION.findall("-foo bar --baz and %quux the -4") == ['-foo', '--baz', '-4']
+
 ESCAPE_DICT = {
     "t": "\t",
     "n": "\n",
@@ -28,7 +37,7 @@ ESCAPE_DICT = {
 
 
 Translation = collections.namedtuple("Translation", ["msgid", "msgstr", "line_first"])
-Issue = collections.namedtuple("Issue", ["msgid", "line_first", "reason"])
+Issue = collections.namedtuple("Issue", ["translation", "reason"])
 
 
 def unescape(line: str) -> str:
@@ -120,7 +129,20 @@ def parse_po_data(raw_data: str) -> List[Translation]:
 
 
 def lint_translations(translations: List[Translation]) -> List[Issue]:
-    raise NotImplementedError()
+    issues: List[Issue] = []
+    for t in translations:
+        if not t.msgstr:
+            # Don't complain about missing translations
+            continue
+        special_msgid = RE_SPECIAL_OPTION.findall(t.msgid)
+        special_msgstr = RE_SPECIAL_OPTION.findall(t.msgstr)
+        # TODO: Try harder to pin-point the specific difference
+        if special_msgid != special_msgstr:
+            issues.append(Issue(
+                t,
+                f"mismatching special-strings: >>{special_msgid}<< (in msgid) versus >>{special_msgstr}<< (in msgstr)",
+            ))
+    return issues
 
 
 def run_on(filename: str) -> None:
@@ -131,7 +153,9 @@ def run_on(filename: str) -> None:
     for issue in translation_issues:
         # TODO: Aggregate across files?
         # TODO: Mention msgid somehow?
-        print(f"{filename}:{issue.line_first}: {issue.reason}")
+        print(f"{filename}:{issue.translation.line_first}: {issue.reason}")
+        print(f"    msgid  = {issue.translation.msgid}")
+        print(f"    msgstr  = {issue.translation.msgstr}")
 
 
 if __name__ == "__main__":
