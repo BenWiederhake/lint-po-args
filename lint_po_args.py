@@ -11,7 +11,7 @@ See the regex for details.
 """
 
 import collections
-from typing import List
+from typing import List, Optional
 import re
 
 
@@ -78,8 +78,9 @@ def parse_po_data(raw_data: str) -> List[Translation]:
         if msgid_parts is None:
             assert line.startswith("msgid "), "line %d: expected beginning of msgid" % (i + 1)
         if line.startswith("msgid "):
-            assert (msgid_parts is None) == (msgstr_parts is None), "line %d: start of new translation, but previous from line %d is not complete?!" % (i + 1, line_first)
+            assert (msgid_parts is None) == (msgstr_parts is None), "line %d: start of new translation, but previous from line %s is not complete?!" % (i + 1, line_first)
             if msgid_parts is not None:
+                assert msgstr_parts is not None  # Otherwise, mypy does not understand that joining is okay.
                 translations.append(Translation(
                     "".join(msgid_parts),
                     "".join(msgstr_parts),
@@ -89,18 +90,22 @@ def parse_po_data(raw_data: str) -> List[Translation]:
             msgid_parts = []
             msgstr_parts = None
             line = line[len("msgid "):]
-            assert line.startswith('"'), "line %d: msgid does not directly continue with string?!" % (i + 1, line_first)
+            assert line.startswith('"'), "line %d: msgid does not directly continue with string?!" % (i + 1)
         if line.startswith("msgstr "):
+            assert line_first is not None
             assert (msgid_parts is not None) and (msgstr_parts is None), "line %d: start of msgstr, but inconsistent state with line %d?!" % (i + 1, line_first)
             msgstr_parts = []
             line = line[len("msgstr "):]
         unescaped_line = unescape(line)
         if msgstr_parts is None:
+            assert msgid_parts is not None
             msgid_parts.append(unescaped_line)
         else:
             msgstr_parts.append(unescaped_line)
+    assert line_first is not None
     assert (msgid_parts is None) == (msgstr_parts is None), "line %d: end of file, but translation from line %d is not complete?!" % (i + 1, line_first)
     if msgid_parts is not None:
+        assert msgstr_parts is not None  # Otherwise, mypy does not understand that joining is okay.
         translations.append(Translation(
             "".join(msgid_parts),
             "".join(msgstr_parts),
@@ -122,11 +127,11 @@ def run_on(filename: str) -> None:
     with open(filename, "r") as fp:
         raw_data: str = fp.read()
     po_data: List[Translation] = parse_po_data(raw_data)
-    translation_errors: List[Issue] = lint_translations(po_data)
-    for error in translation_errors:
+    translation_issues: List[Issue] = lint_translations(po_data)
+    for issue in translation_issues:
         # TODO: Aggregate across files?
         # TODO: Mention msgid somehow?
-        print(f"{filename}:{error.line_first}: {reason}")
+        print(f"{filename}:{issue.line_first}: {issue.reason}")
 
 
 if __name__ == "__main__":
