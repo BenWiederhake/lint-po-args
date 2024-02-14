@@ -170,7 +170,7 @@ def run(args: argparse.Namespace) -> None:
 
 def make_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        "Checks for grave translation errors and typos in command-line options or printf-style instructions."
+        description="Checks for grave translation errors and typos in command-line options, and optionally also printf-style instructions."
     )
     parser.add_argument(
         "filenames",
@@ -186,7 +186,7 @@ def make_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--lint-printf",
         action="store_true",
-        help="Show all translations (useful to debug the parser)",
+        help="Also check printf-style instructions",
     )
     return parser
 
