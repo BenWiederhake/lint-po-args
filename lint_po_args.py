@@ -2,31 +2,25 @@
 
 """
 Checks for grave translation errors and typos, like translating "please use
-the -0 option" as "bitte nutze die -O Option", which is a different symbol and
-likely won't work.
+the -0 option" as "bitte nutze die -O Option", which is a different
+command-line option and likely won't work.
 In particular, this script checks:
 - Command-line flags
 - printf-style format instructions
 See the regex for details.
 """
 
+import argparse
 import collections
-from typing import List, Optional
+from typing import Any, List, Optional
 import re
 
 
-FILENAME = "/scratch/findutils-deb/findutils-4.9.0/po/de_simplified.po"
-SHOW_PARSED_TRANSLATIONS = False
-ALSO_CHECK_PRINTF = False
-
-if ALSO_CHECK_PRINTF:
-    RE_SPECIAL_OPTION = re.compile(r"(?<![0-9a-zA-Z_-])-[0-9a-zA-Z_-]+|%[0-9a-zA-Z+-]+", re.M)
-    # In-line unit test:
-    assert RE_SPECIAL_OPTION.findall("-foo bar --baz and %quux the -4") == ['-foo', '--baz', '%quux', '-4']
-else:
-    RE_SPECIAL_OPTION = re.compile(r"(?<![0-9a-zA-Z_-])-[0-9a-zA-Z_-]+", re.M)
-    # In-line unit test:
-    assert RE_SPECIAL_OPTION.findall("-foo bar --baz and %quux the -4") == ['-foo', '--baz', '-4']
+RE_PRINTFISH = re.compile(r"%[0-9a-zA-Z+-]+", re.M)
+RE_CMDLINE_OPTION = re.compile(r"(?<![0-9a-zA-Z_-])-[0-9a-zA-Z_-]+", re.M)
+# In-line unit test:
+assert RE_PRINTFISH.findall("-foo bar --baz and %quux the -4") == ['%quux']
+assert RE_CMDLINE_OPTION.findall("-foo bar --baz and %quux the -4") == ['-foo', '--baz', '-4']
 
 ESCAPE_DICT = {
     "t": "\t",
@@ -79,6 +73,7 @@ def parse_po_data(raw_data: str) -> List[Translation]:
     msgid_parts: Optional[List[str]] = None 
     msgstr_parts: Optional[List[str]] = None
     translations: List[Translation] = []
+    i = -1
     for i, line in enumerate(raw_data.split("\n")):
         assert (line_first is None) == (msgid_parts is None), "line %d: inconsistent parser state" % (i + 1 - 1)
         if not line or line.startswith("#"):
@@ -120,43 +115,81 @@ def parse_po_data(raw_data: str) -> List[Translation]:
             "".join(msgstr_parts),
             line_first,
         ))
-    if SHOW_PARSED_TRANSLATIONS:
-        for t in translations:
-            print(f"line {t.line_first}:")
-            print(f"    {t.msgid}")
-            print(f"    {t.msgstr}")
     return translations
 
 
-def lint_translations(translations: List[Translation]) -> List[Issue]:
+def lint_translations(translations: List[Translation], lint_printf: bool) -> List[Issue]:
     issues: List[Issue] = []
     for t in translations:
         if not t.msgstr:
             # Don't complain about missing translations
             continue
-        special_msgid = RE_SPECIAL_OPTION.findall(t.msgid)
-        special_msgstr = RE_SPECIAL_OPTION.findall(t.msgstr)
+        cmdline_msgid = RE_CMDLINE_OPTION.findall(t.msgid)
+        cmdline_msgstr = RE_CMDLINE_OPTION.findall(t.msgstr)
+        if lint_printf:
+            printf_msgid = RE_PRINTFISH.findall(t.msgid)
+            printf_msgstr = RE_PRINTFISH.findall(t.msgstr)
+        else:
+            printf_msgid = []
+            printf_msgstr = []
         # TODO: Try harder to pin-point the specific difference
-        if special_msgid != special_msgstr:
+        if cmdline_msgid != cmdline_msgstr:
             issues.append(Issue(
                 t,
-                f"mismatching special-strings: >>{special_msgid}<< (in msgid) versus >>{special_msgstr}<< (in msgstr)",
+                f"mismatching mentions of command-line options: >>{cmdline_msgid}<< (in msgid) versus >>{cmdline_msgstr}<< (in msgstr)",
+            ))
+        if printf_msgid != printf_msgstr:
+            issues.append(Issue(
+                t,
+                f"mismatching printf instructions: >>{printf_msgid}<< (in msgid) versus >>{printf_msgstr}<< (in msgstr)",
             ))
     return issues
 
 
-def run_on(filename: str) -> None:
-    with open(filename, "r") as fp:
-        raw_data: str = fp.read()
-    po_data: List[Translation] = parse_po_data(raw_data)
-    translation_issues: List[Issue] = lint_translations(po_data)
+def run_on(openfile: Any, show_parsed_translations: bool, lint_printf: bool) -> None:
+    # TODO: openfile is a TextIOWrapper. How to 'type' this correctly?
+    raw_data: str = openfile.read()
+    translations: List[Translation] = parse_po_data(raw_data)
+    if show_parsed_translations:
+        for t in translations:
+            print(f"line {t.line_first}:")
+            print(f"    {t.msgid}")
+            print(f"    {t.msgstr}")
+    translation_issues: List[Issue] = lint_translations(translations, lint_printf)
     for issue in translation_issues:
         # TODO: Aggregate across files?
-        # TODO: Mention msgid somehow?
-        print(f"{filename}:{issue.translation.line_first}: {issue.reason}")
+        print(f"{openfile.name}:{issue.translation.line_first}: {issue.reason}")
         print(f"    msgid  = {issue.translation.msgid}")
         print(f"    msgstr  = {issue.translation.msgstr}")
 
 
+def run(args: argparse.Namespace) -> None:
+    for openfile in args.filenames:
+        run_on(openfile, args.show_parsed_translations, args.lint_printf)
+
+
+def make_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        "Checks for grave translation errors and typos in command-line options or printf-style instructions."
+    )
+    parser.add_argument(
+        "filenames",
+        nargs="+",
+        type=argparse.FileType("r", encoding="utf8"),
+        help="Paths to the PO file(s)",
+    )
+    parser.add_argument(
+        "--show-parsed-translations",
+        action="store_true",
+        help="Show all translations (useful to debug the parser)",
+    )
+    parser.add_argument(
+        "--lint-printf",
+        action="store_true",
+        help="Show all translations (useful to debug the parser)",
+    )
+    return parser
+
+
 if __name__ == "__main__":
-    run_on(FILENAME)  # FIXME: Use argparse
+    run(make_parser().parse_args())
